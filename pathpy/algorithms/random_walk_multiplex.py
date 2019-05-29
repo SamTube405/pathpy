@@ -37,8 +37,9 @@ from pathpy.classes import Network
 from pathpy.classes import HigherOrderNetwork
 import numpy as _np
 
+__all__ = ["_temporal_walk_layer"]
 
-
+@singledispatch
 def _temporal_walk_layer(tempnet1, tempnet2, layernet, start_node, start_layer):
     def temporal_edge_filter(v, landmark, tempnet):
         new_targets = {}
@@ -61,13 +62,21 @@ def _temporal_walk_layer(tempnet1, tempnet2, layernet, start_node, start_layer):
 
         return new_targets
 
-    ## pick the start layer
-    if start_layer == 1:
-        tempnet=tempnet1
-    elif start_layer == 2:
-        tempnet=tempnet2
+    
+    
 
     itinerary = []
+    
+    ## pick the start layer
+    if start_layer is None:
+        tempnet = _np.random.choice([tempnet1,tempnet2])
+    else:
+        if start_layer == 1:
+            tempnet=tempnet1
+        elif start_layer == 2:
+            tempnet=tempnet2
+     
+    ## pick the start node
     if start_node is None:
         current_node = _np.random.choice(tempnet.nodes)
     else:
@@ -92,8 +101,6 @@ def _temporal_walk_layer(tempnet1, tempnet2, layernet, start_node, start_layer):
             ## pick up a random cross target
             start_target = _np.random.choice(start_targets)
 
-            steps = 0
-
             ## get all time-steps in the multiplex network
             time_steps = sorted(list(set(tempnet1.ordered_times + tempnet2.ordered_times)))
 
@@ -109,12 +116,12 @@ def _temporal_walk_layer(tempnet1, tempnet2, layernet, start_node, start_layer):
                     # find possible targets in tempnet1
                     for (v, w, time) in tempnet1.time[t]:
                         if v == current_node:
-                            targets[w]=w
+                            targets[w]=(w,0)
 
                     # find possible targets in tempnet2
                     for (v, w, time) in tempnet2.time[t]:
                         if v == current_node:
-                            targets[w]=w
+                            targets[w]=(w,0)
 
                     ## adding cross-layer targets
                     layer_targets = list(layernet.successors[current_node])
@@ -133,22 +140,23 @@ def _temporal_walk_layer(tempnet1, tempnet2, layernet, start_node, start_layer):
 
                             # update the target list
                             for _new_target, _new_target_delay in _new_targets.items():
-                                targets[_new_target] = layer_target
+                                targets[_new_target] = (layer_target,_new_target_delay)
 
                     # move to random target
                     if targets:
                         current_node = _np.random.choice(list(targets.keys()))
-                        current_node_parent = targets[current_node]
+                        current_node_parent = targets[current_node][0]
+                        current_node_delay = targets[current_node][1]
 
                         # add currently visited node
                         if current_node != prev_node:
                             # if the target is a cross-layer target, add the parent
                             if current_node != current_node_parent:
                                 itinerary.append(current_node_parent)
-
+                            
                             # always add the child
                             itinerary.append(current_node)
-
-                            steps += 1
-
+                            
+                            # update the timestep based on the target
+                            current_start_t=t+current_node_delay
     return itinerary
